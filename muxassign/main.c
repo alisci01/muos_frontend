@@ -65,8 +65,11 @@ int current_item_index = 0;
 int first_open = 1;
 
 char *auto_assign;
-char *rom_dir;
 char *rom_system;
+char *rom_dir;
+char *rom_content;
+
+const char *store_favourite;
 
 enum core_gen_type {
     SINGLE,
@@ -149,7 +152,7 @@ void free_subdirectories(char **dir_names) {
 void create_core_assignment(const char *core, char *sys, int cache, enum core_gen_type method) {
     char core_dir[MAX_BUFFER_SIZE];
     snprintf(core_dir, sizeof(core_dir), "%s/MUOS/info/core/%s/",
-             device.STORAGE.ROM.MOUNT, get_last_subdir(rom_dir, '/', 4));
+             store_favourite, get_last_subdir(rom_dir, '/', 4));
 
     create_directories(core_dir);
     //delete_files_of_type(core_dir, "cfg", NULL);
@@ -161,7 +164,7 @@ void create_core_assignment(const char *core, char *sys, int cache, enum core_ge
         case PARENT: {
             char subdir_path[MAX_BUFFER_SIZE];
             snprintf(subdir_path, sizeof(subdir_path), "%s/MUOS/info/core/%s/",
-                     device.STORAGE.ROM.MOUNT, get_last_subdir(rom_dir, '/', 4));
+                     store_favourite, get_last_subdir(rom_dir, '/', 4));
 
             char **subdirs = get_subdirectories(rom_dir);
             if (subdirs != NULL) {
@@ -188,7 +191,7 @@ void create_core_assignment(const char *core, char *sys, int cache, enum core_ge
         default: {
             char core_file[MAX_BUFFER_SIZE];
             snprintf(core_file, sizeof(core_file), "%s/MUOS/info/core/%s/core.cfg",
-                     device.STORAGE.ROM.MOUNT, get_last_subdir(rom_dir, '/', 4));
+                     store_favourite, get_last_subdir(rom_dir, '/', 4));
 
             FILE * file = fopen(core_file, "w");
             if (file == NULL) {
@@ -511,7 +514,7 @@ void *joystick_task() {
                                     play_sound("confirm", nav_sound, 1);
 
                                     if (strcasecmp(rom_system, "none") == 0) {
-                                        load_assign(rom_dir, str_trim(lv_label_get_text(element_focused)));
+                                        load_assign(str_trim(lv_label_get_text(element_focused)), rom_dir, rom_content);
                                     } else {
                                         char chosen_core_ini[FILENAME_MAX];
                                         snprintf(chosen_core_ini, sizeof(chosen_core_ini),
@@ -544,7 +547,7 @@ void *joystick_task() {
                                         fprintf(file, "%s", "");
                                         fclose(file);
                                     } else {
-                                        load_assign(rom_dir, "none");
+                                        load_assign("none", rom_dir, rom_content);
                                     }
 
                                     remove(MUOS_SAA_LOAD);
@@ -861,22 +864,26 @@ int main(int argc, char *argv[]) {
     load_device(&device);
     srand(time(NULL));
 
-    char *cmd_help = "\nmuOS Extras - Core Assignment\nUsage: %s <-ads>\n\nOptions:\n"
+    char *cmd_help = "\nmuOS Extras - Core Assignment\nUsage: %s <-asdc>\n\nOptions:\n"
                      "\t-a Auto assign content directory check\n"
+                     "\t-s Name of content system (use 'none' for root)\n"
                      "\t-d Name of content directory\n"
-                     "\t-s Name of content system (use 'none' for root)\n\n";
+                     "\t-c Name of content filename (use 'none' for dir only)\n\n";
 
     int opt;
-    while ((opt = getopt(argc, argv, "a:d:s:")) != -1) {
+    while ((opt = getopt(argc, argv, "a:s:d:c:")) != -1) {
         switch (opt) {
             case 'a':
                 auto_assign = optarg;
                 break;
+            case 's':
+                rom_system = optarg;
+                break;
             case 'd':
                 rom_dir = optarg;
                 break;
-            case 's':
-                rom_system = optarg;
+            case 'c':
+                rom_content = optarg;
                 break;
             default:
                 fprintf(stderr, cmd_help, argv[0]);
@@ -884,24 +891,26 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (auto_assign == NULL || rom_dir == NULL || rom_system == NULL) {
+    if (auto_assign == NULL || rom_system == NULL || rom_dir == NULL || rom_content == NULL) {
         fprintf(stderr, cmd_help, argv[0]);
         return 1;
     }
 
-    printf("ASSIGN CORE ROM_DIR: \"%s\"\n", rom_dir);
+    load_config(&config);
+    store_favourite = get_default_storage(config.STORAGE.FAV);
+
     printf("ASSIGN CORE ROM_SYS: \"%s\"\n", rom_system);
+    printf("ASSIGN CORE ROM_DIR: \"%s\"\n", rom_dir);
+    printf("ASSIGN CORE ROM_BIN: \"%s\"\n", rom_content);
 
     if (atoi(auto_assign) && !file_exist(MUOS_SAA_LOAD)) {
         printf("ASSIGN AUTO INITIATED\n");
 
         char core_file[MAX_BUFFER_SIZE];
         snprintf(core_file, sizeof(core_file), "%s/MUOS/info/core/%s/core.cfg",
-                 device.STORAGE.ROM.MOUNT, get_last_subdir(rom_dir, '/', 4));
+                 store_favourite, get_last_subdir(rom_dir, '/', 4));
 
-        if (file_exist(core_file)) {
-            return 0;
-        }
+        if (file_exist(core_file)) return 0;
 
         int auto_assign_good = 0;
 
@@ -914,6 +923,8 @@ int main(int argc, char *argv[]) {
             snprintf(assign_check, sizeof(assign_check), "%s",
                      str_tolower(get_last_dir(rom_dir)));
             str_remchars(assign_check, " -_+");
+
+            printf("CHECKING ASSIGN JSON FOR: %s\n", assign_check);
 
             struct json auto_assign_config = json_object_get(
                     json_parse(read_text_from_file(assign_file)),

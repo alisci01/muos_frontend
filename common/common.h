@@ -170,7 +170,7 @@ void decrease_option_value(lv_obj_t *element, int *current, int total);
 
 void load_system(const char *value);
 
-void load_assign(const char *dir, const char *sys);
+void load_assign(int auto_assign, char *sys, char *rom_dir, char *rom_file);
 
 void load_mux(const char *value);
 
@@ -209,3 +209,5 @@ int should_skip(const char *name);
 void adjust_visual_label(char *text, int method, int rep_dash);
 
 void update_scroll_position(int mux_item_count, int mux_item_panel, int ui_count, int current_item_index, lv_obj_t * ui_pnlContent, lv_obj_t * ui_pnlGlyph, lv_obj_t * ui_pnlHighlight);
+
+void extract_path_info(const char *file_path, char **detect_sd, char **detect_rompath, char **detect_romfile);

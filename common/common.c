@@ -94,8 +94,8 @@ unsigned long long total_file_size(const char *path) {
 }
 
 int time_compare_for_history(const void *a, const void *b) {
-    char *file_a = strip_label_placement(strdup(*(const char **)a));
-    char *file_b = strip_label_placement(strdup(*(const char **)b));
+    char *file_a = strip_label_placement(strdup(*(const char **) a));
+    char *file_b = strip_label_placement(strdup(*(const char **) b));
 
     char mod_file_a[MAX_BUFFER_SIZE];
     char mod_file_b[MAX_BUFFER_SIZE];
@@ -1005,14 +1005,14 @@ void load_system(const char *value) {
     fclose(file);
 }
 
-void load_assign(const char *dir, const char *sys) {
+void load_assign(int auto_assign, char *sys, char *rom_dir, char *rom_file) {
     FILE * file = fopen(MUOS_ASS_LOAD, "w");
     if (file == NULL) {
         perror("fopen");
         return;
     }
 
-    fprintf(file, "%s\n%s", dir, sys);
+    fprintf(file, "%d\n%s\n%s\n%s", auto_assign, sys, rom_dir, strip_ext(rom_file));
     fclose(file);
 }
 
@@ -1503,11 +1503,12 @@ void adjust_visual_label(char *text, int method, int rep_dash) {
     }
 }
 
-void update_scroll_position(int mux_item_count, int mux_item_panel, int ui_count, 
-    int current_item_index, lv_obj_t * ui_pnlContent, lv_obj_t * ui_pnlGlyph, lv_obj_t * ui_pnlHighlight
-    ) {
+void update_scroll_position(int mux_item_count, int mux_item_panel, int ui_count,
+                            int current_item_index, lv_obj_t *ui_pnlContent, lv_obj_t *ui_pnlGlyph,
+                            lv_obj_t *ui_pnlHighlight
+) {
     // how many items should be above the currently selected item when scrolling
-    double item_distribution = (mux_item_count - 1) / (double)2; 
+    double item_distribution = (mux_item_count - 1) / (double) 2;
     // how many items are off screen
     double scrollMultiplier = (current_item_index > item_distribution) ? (current_item_index - item_distribution) : 0;
     // max scroll value
@@ -1539,3 +1540,43 @@ void update_scroll_position(int mux_item_count, int mux_item_panel, int ui_count
     }
 }
 
+void extract_path_info(const char *file_path, char **detect_sd, char **detect_rompath, char **detect_romfile) {
+    *detect_sd = malloc(PATH_MAX);
+    *detect_rompath = malloc(PATH_MAX);
+    *detect_romfile = malloc(PATH_MAX);
+
+    if (*detect_sd && *detect_rompath && *detect_romfile) {
+        // is there a better way of doing this?!
+        const char *sdcard_pos = NULL;
+        if ((sdcard_pos = strstr(file_path, "/mmc/")) != NULL) {
+            strncpy(*detect_sd, "mmc", PATH_MAX);
+        } else if ((sdcard_pos = strstr(file_path, "/sdcard/")) != NULL) {
+            strncpy(*detect_sd, "sdcard", PATH_MAX);
+        } else if ((sdcard_pos = strstr(file_path, "/usb/")) != NULL) {
+            strncpy(*detect_sd, "usb", PATH_MAX);
+        } else {
+            **detect_sd = '\0';
+        }
+
+        if (*detect_sd[0] != '\0') {
+            const char *path_end = sdcard_pos + strlen(*detect_sd) + 17;
+            const char *filename_start = strrchr(path_end, '/');
+
+            if (filename_start) {
+                strncpy(*detect_rompath, path_end, filename_start - path_end);
+                (*detect_rompath)[filename_start - path_end] = '\0';
+                strcpy(*detect_romfile, filename_start + 1);
+            } else {
+                **detect_rompath = '\0';
+                **detect_romfile = '\0';
+            }
+        } else {
+            **detect_rompath = '\0';
+            **detect_romfile = '\0';
+        }
+    } else {
+        **detect_sd = '\0';
+        **detect_rompath = '\0';
+        **detect_romfile = '\0';
+    }
+}
